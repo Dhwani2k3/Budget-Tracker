@@ -1,0 +1,227 @@
+import tkinter as tk
+from tkinter import messagebox
+import pandas as pd
+
+# Data placeholder
+data = pd.DataFrame(columns=["Type", "Amount", "Description"])
+refresh_data = False
+
+# Add entry function
+def add_entry(type_entry, amount_entry, desc_entry):
+    global data
+
+    etype = type_entry.get()
+    amount = amount_entry.get()
+    description = desc_entry.get()
+
+    if etype not in ["Income", "Expense"]:
+        messagebox.showerror("Error", "Type must be 'Income' or 'Expense'")
+        return
+
+    try:
+        amount = float(amount)
+        if amount <= 0:
+            raise ValueError("Amount must be greater than zero.")
+    except ValueError as e:
+        messagebox.showerror("Error", str(e))
+        return
+
+    new_entry = pd.DataFrame([[etype, amount, description]], columns=["Type", "Amount", "Description"])
+    data = pd.concat([data, new_entry], ignore_index=True)
+
+    type_entry.delete(0, tk.END)
+    amount_entry.delete(0, tk.END)
+    desc_entry.delete(0, tk.END)
+
+    messagebox.showinfo("Success", "Entry added successfully")
+
+    if refresh_data:
+        update_data_display(root)  # Pass root to update_data_display()
+
+
+# Update data display function
+def update_data_display(root):
+    global data, entry_buttons
+
+    # Clear any previous entries in dframe (if any)
+    for widget in dframe.winfo_children():
+        widget.destroy()
+
+    # Ensure canvas entries are cleared before displaying new ones
+    canvas.delete('data_entries')  # This clears all previously drawn text entries
+    entry_buttons = []  # List to track the remove buttons
+
+    if data.empty:
+        canvas.create_text(620, 530, text="No data available.", fill="white", font=("Helvetica", 12), tags='data_entries')
+        return
+
+    y_position = 480  # Starting Y position for the first entry
+    for index, row in data.iterrows():
+        # Display each entry as text on the canvas with the same styling as your labels
+        text_id = canvas.create_text(530, y_position, text=f"{row['Type']} - ₹{row['Amount']} - {row['Description']}",
+                                     fill="white", font=("Helvetica", 12), tags='data_entries')
+
+        # Create a "Remove" button next to the text, placed directly on the canvas (no frame)
+        remove_button = tk.Button(root, text="Remove", command=lambda idx=index: remove_entry(idx),
+                                  font=("Helvetica", 12), fg="black", bd=0, relief="flat",width=10,height=1)
+
+        # Place the button on the canvas (x=700, y_position=desired location for the button)
+        button_id = canvas.create_window(700, y_position - 5, window=remove_button)
+
+        # Store button and text id to delete them later
+        entry_buttons.append((text_id, button_id))
+
+        y_position += 30  # Move down for the next entry
+
+
+# Show data function
+def show_data():
+    global refresh_data
+    if show_button["text"] == "Show Data":
+        refresh_data = True
+        update_data_display(root)  # Pass root to update_data_display() when showing data
+        show_button["text"] = "Hide Data"
+    else:
+        # Clear both the canvas and the dframe when "Hide Data" is clicked
+        canvas.delete('data_entries')  # Removes all the data text
+        refresh_data = False
+        show_button["text"] = "Show Data"
+        for button in entry_buttons:
+            canvas.delete(button[1])  # Delete the "Remove" buttons
+
+
+# Remove entry function
+def remove_entry(index):
+    global data, entry_buttons
+    data = data.drop(index).reset_index(drop=True)
+    messagebox.showinfo("Removed", "Entry removed successfully.")
+
+    if refresh_data:
+        # Remove the text and button associated with this entry
+        text_id, button_id = entry_buttons[index]
+        canvas.delete(text_id)  # Delete the text
+        canvas.delete(button_id)  # Delete the "Remove" button
+
+        # Update the data display after removal
+        entry_buttons = [btn for idx, btn in enumerate(entry_buttons) if idx != index]  # Remove from button list
+        update_data_display(root)  # Pass root to update_data_display() after removing
+
+
+# Calculate loss or profit
+def calculate_loss():
+    if data.empty:
+        messagebox.showinfo("Info", "No data available to calculate loss.")
+        return
+
+    income = data[data["Type"] == "Income"]["Amount"].sum()
+    expense = data[data["Type"] == "Expense"]["Amount"].sum()
+
+    if expense > income:
+        loss = expense - income
+        messagebox.showinfo("Loss Calculation", f"You are in a loss of: ₹{loss:.2f}")
+    else:
+        profit = income - expense
+        messagebox.showinfo("Profit Calculation", f"You are in profit of: ₹{profit:.2f}")
+
+
+# Clear all entries
+def clear_entries():
+    global data, entry_buttons
+    data = pd.DataFrame(columns=["Type", "Amount", "Description"])
+    messagebox.showinfo("Cleared", "All entries cleared.")
+
+    if refresh_data:
+        # Remove all data and buttons from the canvas
+        canvas.delete('data_entries')  # Removes all the data text
+        for button in entry_buttons:
+            canvas.delete(button[1])  # Delete the "Remove" buttons
+
+        entry_buttons = []  # Clear the list tracking buttons
+        update_data_display(root)  # Pass root to update_data_display() after clearing
+
+
+# Create widgets and layout
+def create_widgets(root):
+    global canvas, show_button, dframe, bg_image, more_options_button
+    global show_button_window, calc_button_window, clear_button_window  # Declare as global
+
+    # Create a canvas to hold the background image and widgets
+    canvas = tk.Canvas(root, width=1000, height=630)
+    canvas.pack(fill="both", expand=True)
+
+    # Load and place the background image using PhotoImage (no need for Pillow)
+    bg_image_path = r"G:\STUDY\COLLEGE\MCA\python\Programs\github\Pythoncode\budgettrackerbg.png"  # Replace with the correct path to your image
+    bg_image = tk.PhotoImage(file=bg_image_path)  # Load the image using Tkinter's PhotoImage
+
+    # Keep a reference to the image object to prevent garbage collection
+    canvas.create_image(0, 0, anchor="nw", image=bg_image)
+
+    # Create primary More Options button
+    more_options_button = tk.Button(root, text="More Options", command=toggle_more_options)
+    canvas.create_window(700, 313, window=more_options_button)
+
+    # Additional option buttons (initially hidden)
+    show_button = tk.Button(root, text="Show Data", command=show_data, bg="white", fg="black", bd=0, relief="flat")
+    calc_button = tk.Button(root, text="Calculate Loss/Profit", command=calculate_loss, bg="white", fg="black", bd=0, relief="flat")
+    clear_button = tk.Button(root, text="Clear All Entries", command=clear_entries, bg="white", fg="black", bd=0, relief="flat")
+
+    # Initially hide the option buttons
+    show_button_window = canvas.create_window(635, 350, window=show_button)
+    calc_button_window = canvas.create_window(635, 390, window=calc_button)
+    clear_button_window = canvas.create_window(635, 430, window=clear_button)
+
+    canvas.itemconfig(show_button_window, state='hidden')
+    canvas.itemconfig(calc_button_window, state='hidden')
+    canvas.itemconfig(clear_button_window, state='hidden')
+
+    # Frame for displaying data (this will appear below the buttons)
+    dframe = tk.Frame(root)
+    canvas.create_window(530, 500, window=dframe)
+
+    # Entry and label fields (text fields and labels will stay visible)
+    canvas.create_text(540, 130, text="Type (Income/Expense):", fill="white", font=("Helvetica", 14))
+    type_entry = tk.Entry(root)
+    type_entry.place(x=650, y=120)
+
+    canvas.create_text(550, 180, text="Amount:", fill="white", font=("Helvetica", 14))
+    amount_entry = tk.Entry(root)
+    amount_entry.place(x=650, y=170)
+
+    canvas.create_text(550, 230, text="Description:", fill="white", font=("Helvetica", 14))
+    desc_entry = tk.Entry(root)
+    desc_entry.place(x=650, y=220)
+
+    # Button to add an entry (added back as requested)
+    add_button = tk.Button(root, text="Add Entry", command=lambda: add_entry(type_entry, amount_entry, desc_entry), fg="black", bd=0, relief="flat",width=11)
+    add_button.place(x=550, y=300)
+
+
+# Toggle the visibility of the "More Options" buttons
+def toggle_more_options():
+    # Toggle visibility of "More Options" buttons (Show Data, Calculate Loss/Profit, Clear All Entries)
+    current_state = canvas.itemcget(show_button_window, 'state')
+
+    if current_state == 'hidden':
+        canvas.itemconfig(show_button_window, state='normal')
+        canvas.itemconfig(calc_button_window, state='normal')
+        canvas.itemconfig(clear_button_window, state='normal')
+        more_options_button.config(text="Hide Options")  # Change button text to "Hide Options"
+    else:
+        canvas.itemconfig(show_button_window, state='hidden')
+        canvas.itemconfig(calc_button_window, state='hidden')
+        canvas.itemconfig(clear_button_window, state='hidden')
+        more_options_button.config(text="More Options")  # Change button text back to "More Options"
+
+
+def main():
+    global root
+    root = tk.Tk()
+    root.title("Budget App")
+
+    create_widgets(root)
+
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
